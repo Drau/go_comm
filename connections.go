@@ -9,8 +9,8 @@ type session_conn struct {
 	active   bool
 }
 
-func newSessionConn(c net.Conn) session_conn {
-	return session_conn{c, make(chan string), "", true}
+func newSessionConn(c net.Conn) *session_conn {
+	return &session_conn{c, make(chan string), "", true}
 }
 
 func (s *session_conn) getAddress() string {
@@ -22,4 +22,4 @@ func (s *session_conn) close() {
 	s.active = false
 }
 
-type connections []session_conn
+type connections []*session_conn

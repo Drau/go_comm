@@ -39,12 +39,12 @@ func openClient(conns *connections, ip string, port string) bool {
 		fmt.Println("Error connecting:", err.Error())
 		return false
 	}
-	session := newSessionConn(s)
-	fmt.Println("Client " + session.getAddress() + " connected.")
+	session_P := newSessionConn(s)
+	fmt.Println("Client " + session_P.getAddress() + " connected.")
 
-	(*conns) = append((*conns), session)
+	(*conns) = append((*conns), session_P)
 
-	go handleConnection(conns, &session)
+	go handleConnection(conns, session_P)
 	return true
 }
 
@@ -64,12 +64,12 @@ func serverManager(conns *connections) {
 			fmt.Println("Error connecting:", err.Error())
 			return
 		}
-		session := newSessionConn(s)
-		fmt.Println("Client " + session.getAddress() + " connected.")
+		session_P := newSessionConn(s)
+		fmt.Println("Client " + session_P.getAddress() + " connected.")
 
-		(*conns) = append((*conns), session)
+		(*conns) = append((*conns), session_P)
 
-		go handleConnection(conns, &session)
+		go handleConnection(conns, session_P)
 	}
 }
 
@@ -110,13 +110,15 @@ func consoleListener(conns *connections) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		input, _ := reader.ReadString('\n')
+		found := false
 		for _, s := range *conns {
 			if s.active {
-				fmt.Println(">>> 1: " + input)
 				s.cmd_chan <- input
-				Im never getting here after client closes remote session !!!!! maybe use chanels to pass info about closed connection to main() where it will save all conns
-				fmt.Println(">>>  2")
+				found = true
 			}
+		}
+		if !found {
+			fmt.Println("No available clients to recieve the message")
 		}
 	}
 }
