@@ -2,8 +2,8 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"time"
@@ -15,25 +15,42 @@ const (
 	connType = "tcp"
 )
 
-type logger struct {
-	color string
-}
-
-func (l logger) print(m string) {
-	log.Print(l.color + m + "\033[0m")
-}
-
 func main() {
-	go serverListener()
-	time.Sleep(1 * time.Second)
-	go openClient()
+	ipFlag := flag.String("i", "", "help message for flag n")
+	portFlag := flag.String("p", "", "help message for flag n")
+	flag.Parse()
+	conns := make(connections, 0, 100)
+	if !openClient(&conns, *ipFlag, *portFlag) {
+		go serverManager(&conns)
+	}
+
+	go consoleListener(&conns)
 
 	time.Sleep(100 * time.Second)
 
 }
 
-func serverListener() {
+func openClient(conns *connections, ip string, port string) bool {
+	if ip == "" || port == "" {
+		return false
+	}
+	s, err := net.Dial(connType, connHost+":"+connPort)
+	if err != nil {
+		fmt.Println("Error connecting:", err.Error())
+		return false
+	}
+	session := newSessionConn(s)
+	fmt.Println("Client " + session.getAddress() + " connected.")
+
+	(*conns) = append((*conns), session)
+
+	go handleConnection(conns, &session)
+	return true
+}
+
+func serverManager(conns *connections) {
 	fmt.Println("Starting " + connType + " server on " + connHost + ":" + connPort)
+
 	l, err := net.Listen(connType, connHost+":"+connPort)
 	if err != nil {
 		fmt.Println("Error listening:", err.Error())
@@ -42,53 +59,74 @@ func serverListener() {
 	defer l.Close()
 
 	for {
-		c, err := l.Accept()
+		s, err := l.Accept()
 		if err != nil {
 			fmt.Println("Error connecting:", err.Error())
 			return
 		}
-		fmt.Println("Client " + c.RemoteAddr().String() + " connected.")
-		go handleConnection(c)
+		session := newSessionConn(s)
+		fmt.Println("Client " + session.getAddress() + " connected.")
+
+		(*conns) = append((*conns), session)
+
+		go handleConnection(conns, &session)
 	}
 }
 
-func handleConnection(c net.Conn) {
+func handleConnection(conns *connections, s *session_conn) {
 	l := logger{color: "\033[31m"}
-	c_addr := c.RemoteAddr().String()
-	for {
-		l.print("Server - Waiting for message....")
-		b, err := bufio.NewReader(c).ReadString('\n')
-		if err != nil {
-			fmt.Println("Server - Client " + c_addr + " Left.")
-			c.Close()
-			return
+	ch := make(chan string)
+
+	//goroutine to wait(block) for input on connection, then pass it back to the conenction handler
+	go func(s *session_conn, ch chan string) {
+		for {
+			b, err := bufio.NewReader((*s).conn).ReadString('\n')
+			if err != nil {
+				b = "/quit"
+				ch <- b
+				return
+			}
+			ch <- b
+
 		}
-		l.print("Server - Received message from client " + c_addr + " >>> " + b)
-		c.Write([]byte("ACK"))
-		l.print("Server - Sent ACK to client " + c_addr)
+	}(s, ch)
+
+	for {
+		select {
+		case b := <-ch:
+			if b == "/quit" {
+				fmt.Println("Client " + (*s).getAddress() + " Left.")
+				(*s).close()
+				return
+			}
+			l.print("Message recieved from " + (*s).getAddress() + " >>> " + b)
+		case cmd := <-(*s).cmd_chan:
+			(*s).conn.Write([]byte(cmd))
+		}
 	}
 }
 
-func openClient() {
-	l := logger{color: "\033[32m"}
-	c, err := net.Dial(connType, connHost+":"+connPort)
-	if err != nil {
-		fmt.Println("Error connecting:", err.Error())
-		return
-	}
+func consoleListener(conns *connections) {
 	reader := bufio.NewReader(os.Stdin)
-
 	for {
-		l.print("Client - Waiting for text to send: ")
-		input, _ := reader.ReadBytes('\n')
-
-		c.Write(input)
-
-		reply := make([]byte, 1024)
-		_, err := c.Read(reply)
-		if err != nil {
-			l.print("Client - Error reading message from server")
+		input, _ := reader.ReadString('\n')
+		for _, s := range *conns {
+			if s.active {
+				fmt.Println(">>> 1: " + input)
+				s.cmd_chan <- input
+				Im never getting here after client closes remote session !!!!! maybe use chanels to pass info about closed connection to main() where it will save all conns
+				fmt.Println(">>>  2")
+			}
 		}
-		l.print("Client - Server replied >>> " + string(reply))
 	}
 }
+
+// type i_message struct {
+// 	message string
+// 	cmd     string
+// 	to      *[]session_conn
+// }
+
+// func parseRawInput(conns *connections, i string) {
+
+// }
