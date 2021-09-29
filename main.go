@@ -1,134 +1,242 @@
 package main
 
 import (
-	"bufio"
-	"flag"
 	"fmt"
-	"net"
-	"os"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+	"strings"
 	"time"
 )
 
-const (
-	connHost = "127.0.0.1"
-	connPort = "8080"
-	connType = "tcp"
-)
+// helper function to create a popup like window mid screen
+func popup(p tview.Primitive, width, height int) tview.Primitive {
+	return tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(p, height, 1, false).
+			AddItem(nil, 0, 1, false), width, 1, false).
+		AddItem(nil, 0, 1, false)
+}
+
+func a(app *tview.Application) {
+	for {
+		time.Sleep(10)
+		app.Draw()
+	}
+}
 
 func main() {
-	ipFlag := flag.String("i", "", "help message for flag n")
-	portFlag := flag.String("p", "", "help message for flag n")
-	flag.Parse()
-	conns := make(connections, 0, 100)
-	if !openClient(&conns, *ipFlag, *portFlag) {
-		go serverManager(&conns)
-	}
 
-	go consoleListener(&conns)
+	localUser := user{active: true}
+	loggedUsersUpdate := make(chan bool, 10)
+	conns := make(connections)
+	conns["local"] = &localUser
 
-	time.Sleep(100 * time.Second)
+	app := tview.NewApplication()
 
-}
+	go a(app) // WHY IS THIS NEEDED ?!?!?!?!?!?!?!?!?!?!
 
-func openClient(conns *connections, ip string, port string) bool {
-	if ip == "" || port == "" {
-		return false
-	}
-	s, err := net.Dial(connType, connHost+":"+connPort)
-	if err != nil {
-		fmt.Println("Error connecting:", err.Error())
-		return false
-	}
-	session_P := newSessionConn(s)
-	fmt.Println("Client " + session_P.getAddress() + " connected.")
+	// window showing logged users to our chat room
+	loggedUsers := tview.NewTextView()
+	loggedUsers.SetBorder(true).SetTitle("Logged Users")
 
-	(*conns) = append((*conns), session_P)
+	// window showing all relevant text written in chat
+	chat := tview.NewTextView()
 
-	go handleConnection(conns, session_P)
-	return true
-}
+	// window showing all logs
+	logs := tview.NewTextView()
 
-func serverManager(conns *connections) {
-	fmt.Println("Starting " + connType + " server on " + connHost + ":" + connPort)
+	chat.SetTitle("Chat").SetBorder(true)
+	logs.SetTitle("Logs").SetBorder(true)
 
-	l, err := net.Listen(connType, connHost+":"+connPort)
-	if err != nil {
-		fmt.Println("Error listening:", err.Error())
-		os.Exit(1)
-	}
-	defer l.Close()
+	// input line for all user text
+	input := tview.NewInputField().
+		SetLabel("Me >> ").
+		SetFieldWidth(0).
+		SetPlaceholder("\\help (ctrl+h) for help menu").
+		SetFieldBackgroundColor(tcell.ColorWhite).
+		SetFieldTextColor(tcell.ColorBlack)
 
-	for {
-		s, err := l.Accept()
-		if err != nil {
-			fmt.Println("Error connecting:", err.Error())
-			return
+	chatPage := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(chat, 0, 16, false).
+		AddItem(nil, 0, 1, false).
+		AddItem(input, 0, 2, true).
+		AddItem(logs, 0, 4, false)
+
+	// popup window containing all possible user commands
+	helpPage := tview.NewModal().
+		SetText("\\help (ctrl+h)\n" +
+			"\\pm <user>\n" +
+			"\\connect <ip>:<port>\n" +
+			"\\quit\n").
+		AddButtons([]string{"Quit"})
+
+	// name popup to enter user info on startup
+	namePage := tview.NewForm().
+		AddInputField("Name", "Me", 20, nil, nil).
+		AddInputField("Port", "8080", 5, nil, nil).
+		AddCheckbox("Age 18+", false, nil)
+	namePage.SetBorder(true).SetTitle("Welcome - Enter your name").SetTitleAlign(tview.AlignLeft)
+
+	// name popup to enter user info on startup
+	connectPage := tview.NewForm().
+		AddInputField("IP", "127.0.0.1", 25, nil, nil).
+		AddInputField("Port", "8080", 5, nil, nil)
+	connectPage.SetBorder(true).SetTitle("Connect to a new client").SetTitleAlign(tview.AlignLeft)
+
+	// pages object for switching relevant windows as needed ( chat page / help page )
+	pages := tview.NewPages().
+		AddPage("Chat", chatPage, true, true).
+		AddPage("Help", popup(helpPage, 40, 10), true, false).
+		AddPage("Name", popup(namePage, 40, 12), true, true).
+		AddPage("Connect", popup(connectPage, 40, 10), true, false)
+
+	helpPage.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+		pages.HidePage("Help")
+		app.SetFocus(input)
+	})
+
+	namePage.AddButton("Save", func() {
+		name := namePage.GetFormItemByLabel("Name").(*tview.InputField).GetText()
+		port := namePage.GetFormItemByLabel("Port").(*tview.InputField).GetText()
+		above18 := namePage.GetFormItemByLabel("Age 18+").(*tview.Checkbox).IsChecked()
+		localUser.name = name
+		localUser.port = port
+		localUser.above18 = above18
+		pages.HidePage("Name")
+		app.SetFocus(input)
+
+		// init all goroutines after welcome screen passed. networking section init
+		go serverManager(conns, chat, logs, loggedUsersUpdate)
+		go updateLoggedUsers(conns, loggedUsers, logs, loggedUsersUpdate)
+	})
+
+	connectPage.AddButton("Connect", func() {
+		ip := connectPage.GetFormItemByLabel("IP").(*tview.InputField).GetText()
+		port := connectPage.GetFormItemByLabel("Port").(*tview.InputField).GetText()
+		if !connectClient(conns, ip+":"+port, chat, logs, loggedUsersUpdate, true) {
+			fmt.Fprintf(logs, "Failed connecting to %s:%s\n", ip, port)
 		}
-		session_P := newSessionConn(s)
-		fmt.Println("Client " + session_P.getAddress() + " connected.")
+		pages.HidePage("Connect")
+		app.SetFocus(input)
+	})
 
-		(*conns) = append((*conns), session_P)
+	// general window for our app
+	screen := tview.NewFlex().
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(loggedUsers, 15, 1, false).
+			AddItem(tview.NewBox().SetBorder(false).SetTitle("Blank"), 0, 1, false), 15, 1, false).
+		AddItem(pages, 0, 3, true)
 
-		go handleConnection(conns, session_P)
+	input.SetDoneFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyEnter:
+			dealWithInput(app, logs, chat, input, pages, helpPage, connectPage, conns)
+			input.SetText("")
+		}
+	})
+
+	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Name() {
+		// string compare as tcell.KeyCtrlH captured on ctrl+H BUT also on Backspace
+		case "Ctrl+Backspace":
+			pages.ShowPage("Help")
+			app.SetFocus(helpPage)
+		}
+		return event
+	})
+
+	if err := app.SetRoot(screen, true).SetFocus(namePage).Run(); err != nil {
+		panic(err)
 	}
 }
 
-func handleConnection(conns *connections, s *session_conn) {
-	l := logger{color: "\033[31m"}
-	ch := make(chan string)
-
-	//goroutine to wait(block) for input on connection, then pass it back to the conenction handler
-	go func(s *session_conn, ch chan string) {
-		for {
-			b, err := bufio.NewReader((*s).conn).ReadString('\n')
-			if err != nil {
-				b = "/quit"
-				ch <- b
-				return
-			}
-			ch <- b
-
-		}
-	}(s, ch)
-
+func updateLoggedUsers(conns connections, loggedUsers *tview.TextView, logs *tview.TextView, loggedUsersUpdate chan bool) {
 	for {
 		select {
-		case b := <-ch:
-			if b == "/quit" {
-				fmt.Println("Client " + (*s).getAddress() + " Left.")
-				(*s).close()
-				return
+		case <-loggedUsersUpdate:
+			loggedUsers.Clear()
+			for name, _ := range conns {
+				if name == "local" {
+					continue
+				}
+				_, err := loggedUsers.Write([]byte(name + "\n"))
+				if err != nil {
+					fmt.Fprintf(logs, "Failed to show user <%s>: %s", name, err)
+				}
 			}
-			l.print("Message recieved from " + (*s).getAddress() + " >>> " + b)
-		case cmd := <-(*s).cmd_chan:
-			(*s).conn.Write([]byte(cmd))
 		}
 	}
 }
 
-func consoleListener(conns *connections) {
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		input, _ := reader.ReadString('\n')
-		found := false
-		for _, s := range *conns {
-			if s.active {
-				s.cmd_chan <- input
-				found = true
-			}
+// function to deal with all user inputs
+func dealWithInput(app *tview.Application,
+	logs *tview.TextView,
+	chat *tview.TextView,
+	input *tview.InputField,
+	pages *tview.Pages,
+	help *tview.Modal,
+	connectPage *tview.Form,
+	conns connections) {
+	text := input.GetText()
+	if text == "" {
+		return
+	}
+	switch strings.ToLower(text) {
+	case "\\help", "\\h":
+		pages.ShowPage("Help")
+		app.SetFocus(help)
+	case "\\quit", "\\q":
+		app.Stop()
+	case "\\connect", "\\c":
+		pages.ShowPage("Connect")
+		app.SetFocus(connectPage)
+	case "\\ac":
+		fmt.Fprintf(logs, "Active connections:\n--------------\n")
+		for _, c := range conns {
+			fmt.Fprintf(logs, "%v\n", *c)
 		}
-		if !found {
-			fmt.Println("No available clients to recieve the message")
+		fmt.Fprintf(logs, "--------------\n")
+	default:
+		splitText := strings.SplitN(text, " ", 3)
+		switch strings.ToLower(splitText[0]) {
+		case "\\pm":
+			if len(splitText) < 3 {
+				fmt.Fprintf(logs, "Cant send pm. user / message are missing\n")
+				break
+			}
+			userName := splitText[1]
+			text := splitText[2]
+			conn := conns[userName]
+			if conn == nil {
+				fmt.Fprintf(logs, "No such user <%s> to PM\n", userName)
+				break
+			}
+			err := conn.sendMessage("PM@" + text)
+			if err != nil {
+				fmt.Fprintf(logs, "Failed to send message to %s: %s\n", userName, err)
+			} else {
+				fmt.Fprintf(chat, "[PM->%s]%s >> %s\n", userName, conns["local"].name, text)
+				fmt.Fprintf(logs, "Sending pm to %s\n", userName)
+
+			}
+
+		default:
+			fmt.Fprintf(logs, "Sending broadcast\n")
+			// send text to all connected users
+			for name, conn := range conns {
+				if name == "local" {
+					continue
+				}
+				fmt.Fprintf(logs, "Sending message to %s- %s\n", name, conn.getAddress())
+				err := conn.sendMessage(text)
+				if err != nil {
+					fmt.Fprintf(logs, "Failed to send message to %s: %s\n", name, err)
+					continue
+				}
+			}
+			fmt.Fprintf(chat, "%s >> %s\n", conns["local"].name, text)
 		}
 	}
 }
-
-// type i_message struct {
-// 	message string
-// 	cmd     string
-// 	to      *[]session_conn
-// }
-
-// func parseRawInput(conns *connections, i string) {
-
-// }
