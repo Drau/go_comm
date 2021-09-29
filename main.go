@@ -66,10 +66,14 @@ func main() {
 
 	// popup window containing all possible user commands
 	helpPage := tview.NewModal().
-		SetText("\\help (ctrl+h)\n" +
-			"\\pm <user>\n" +
-			"\\connect <ip>:<port>\n" +
-			"\\quit\n").
+		SetText(`
+\help (ctrl+h) - Show this help
+\pm <user> - Private message to <user>
+\connect <ip>:<port> - Connect to client <ip>:<port>
+\ac - Show all active connections
+\dc <user> - Disconnect <user>
+\quit - Terminate chat
+`).
 		AddButtons([]string{"Quit"})
 
 	// name popup to enter user info on startup
@@ -88,7 +92,7 @@ func main() {
 	// pages object for switching relevant windows as needed ( chat page / help page )
 	pages := tview.NewPages().
 		AddPage("Chat", chatPage, true, true).
-		AddPage("Help", popup(helpPage, 40, 10), true, false).
+		AddPage("Help", popup(helpPage, 60, 10), true, false).
 		AddPage("Name", popup(namePage, 40, 12), true, true).
 		AddPage("Connect", popup(connectPage, 40, 10), true, false)
 
@@ -221,7 +225,17 @@ func dealWithInput(app *tview.Application,
 				fmt.Fprintf(logs, "Sending pm to %s\n", userName)
 
 			}
-
+		case "\\dc":
+			if len(splitText) != 2 {
+				fmt.Fprintf(logs, "Cant disconnect user. \n")
+				break
+			}
+			r := conns[splitText[1]]
+			if r == nil {
+				fmt.Fprintf(logs, "No such user %s", splitText[1])
+				return
+			}
+			disconnectClient(conns, r, logs)
 		default:
 			fmt.Fprintf(logs, "Sending broadcast\n")
 			// send text to all connected users

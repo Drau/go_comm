@@ -189,6 +189,21 @@ func sendDataToNewClient(localUser *user, remoteUser *user, logs *tview.TextView
 	fmt.Fprintf(logs, "Sent INFO message to <%s>\n", remoteUser.name)
 }
 
+func disconnectClient(conns connections, remoteUser *user, logs *tview.TextView) {
+	remoteUser.conn.Close()
+	final := "DISCONNECT@" + remoteUser.name
+	for name, conn := range conns {
+		if name != "local" && name != remoteUser.name {
+			err := conn.sendMessage(final)
+			if err != nil {
+				fmt.Fprintf(logs, "Failed to send DISCONNECT message: %s", err)
+				return
+			}
+			fmt.Fprintf(logs, "Sent DISCONNECT message to <%s>\n", conn.name)
+		}
+	}
+}
+
 func retrieveConnList(remoteUser *user, logs *tview.TextView) {
 	final := "GETCONNS@"
 	err := remoteUser.sendMessage(final)
