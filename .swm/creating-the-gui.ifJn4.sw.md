@@ -9,7 +9,7 @@ file_blobs:
 
 The app is composed of a GUI based on the [tview](https://github.com/rivo/tview) go module.
 
-The entry point is the 'screen' object
+The entry point is the 'screen' object.
 
 <br/>
 
@@ -20,10 +20,36 @@ The entry point is the 'screen' object
 ⬜ 128    
 ⬜ 129    	// general window for our app
 🟩 130    	screen := tview.NewFlex().
-⬜ 131    		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-⬜ 132    			AddItem(loggedUsers, 15, 1, false).
-⬜ 133    			AddItem(tview.NewBox().SetBorder(false).SetTitle("Blank"), 0, 1, false), 15, 1, false).
+🟩 131    		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+🟩 132    			AddItem(loggedUsers, 15, 1, false).
+🟩 133    			AddItem(tview.NewBox().SetBorder(false).SetTitle("Blank"), 0, 1, false), 15, 1, false).
+🟩 134    		AddItem(pages, 0, 3, true)
+⬜ 135    
+⬜ 136    	input.SetDoneFunc(func(key tcell.Key) {
+⬜ 137    		switch key {
 ```
+
+<br/>
+
+The screen object it self is composed of the following 4 pages:
+
+1.  Main page represents the main chat room view
+    
+    1.  logged in users column - Representing the logged in users to the chat room
+        
+    2.  multi row column
+        
+        1.  Chat messages
+            
+        2.  Input box
+            
+        3.  Logs
+            
+2.  Intro page - First page seen when opening the app.
+    
+3.  help page - Contains all possible special commands
+    
+4.  Connection page - allows the user to create a new connection in the chat room
 
 <br/>
 
