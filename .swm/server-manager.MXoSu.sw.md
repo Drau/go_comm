@@ -4,7 +4,7 @@ name: Server manager
 file_version: 1.0.2
 app_version: 0.6.5-2
 file_blobs:
-  conn_manager.go: 3ac47654c323500dc190ea7359cc5e755f42c9db
+  conn_manager.go: f81892959e2f2ec0ff71d76be491eb20750aeca4
 ---
 
 We have a main go routine in charge of incoming connections to the app.
@@ -16,25 +16,24 @@ basically its an infinite loop waiting for new connections then starting a new g
 <!-- NOTE-swimm-snippet: the lines below link your snippet to Swimm -->
 ### 📄 conn_manager.go
 ```go
-⬜ 89     	}
-⬜ 90     	defer l.Close()
-⬜ 91     
-🟩 92     	for {
-🟩 93     		s, err := l.Accept()
-🟩 94     		if err != nil {
-🟩 95     			fmt.Fprintf(logs, "Error connecting to %s:%s - %s\n", connHost, connPort, err.Error())
-🟩 96     			return
-🟩 97     		}
-🟩 98     		remoteUser := user{name: RandomString(5), above18: true, conn: s, active: true}
-🟩 99     		fmt.Fprintf(logs, "Client "+s.RemoteAddr().String()+" connected.\n")
-🟩 100    		conns[remoteUser.name] = &remoteUser
-🟩 101    		loggedUsersUpdate <- true
-🟩 102    		sendDataToNewClient(conns["local"], &remoteUser, logs)
-🟩 103    		go handleConnection(conns, &remoteUser, chat, logs, loggedUsersUpdate)
-🟩 104    	}
-⬜ 105    }
-⬜ 106    
-⬜ 107    func connectClient(conns connections, host string, chat *tview.TextView, logs *tview.TextView, loggedUsersUpdate chan bool, propogateConnect bool) bool {
+⬜ 77     
+⬜ 78     type connections map[string]*user
+⬜ 79     
+🟩 80     func serverManager(conns connections, chat *tview.TextView, logs *tview.TextView, loggedUsersUpdate chan bool) {
+🟩 81     
+🟩 82     	
+🟩 83     		}
+🟩 84     		remoteUser := user{name: RandomString(5), above18: true, conn: s, active: true}
+🟩 85     		fmt.Fprintf(logs, "Client "+s.RemoteAddr().String()+" connected.\n")
+🟩 86     		conns[remoteUser.name] = &remoteUser
+🟩 87     		loggedUsersUpdate <- true
+🟩 88     		sendDataToNewClient(conns["local"], &remoteUser, logs)
+🟩 89     		go handleConnection(conns, &remoteUser, chat, logs, loggedUsersUpdate)
+🟩 90     	}
+🟩 91     }
+⬜ 92     
+⬜ 93     func connectClient(conns connections, host string, chat *tview.TextView, logs *tview.TextView, loggedUsersUpdate chan bool, propogateConnect bool) bool {
+⬜ 94     	if host == "" {
 ```
 
 <br/>
