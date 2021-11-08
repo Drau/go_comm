@@ -10,6 +10,7 @@ file_blobs:
 We have a main go routine in charge of incoming connections to the app.
 
 basically its an infinite loop waiting for new connections then starting a new go routine per connection.
+yes yes 
 
 <br/>
 
