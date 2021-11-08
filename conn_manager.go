@@ -79,21 +79,7 @@ type connections map[string]*user
 
 func serverManager(conns connections, chat *tview.TextView, logs *tview.TextView, loggedUsersUpdate chan bool) {
 
-	connPort := conns["local"].port
-	fmt.Fprintf(logs, "Listening for new connections on %s:%s...\n", connHost, connPort)
-
-	l, err := net.Listen(connType, connHost+":"+connPort)
-	if err != nil {
-		fmt.Fprintf(logs, "Error listening: %s\n", err.Error())
-		os.Exit(1)
-	}
-	defer l.Close()
-
-	for {
-		s, err := l.Accept()
-		if err != nil {
-			fmt.Fprintf(logs, "Error connecting to %s:%s - %s\n", connHost, connPort, err.Error())
-			return
+	
 		}
 		remoteUser := user{name: RandomString(5), above18: true, conn: s, active: true}
 		fmt.Fprintf(logs, "Client "+s.RemoteAddr().String()+" connected.\n")
