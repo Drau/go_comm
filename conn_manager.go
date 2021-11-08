@@ -82,11 +82,7 @@ func serverManager(conns connections, chat *tview.TextView, logs *tview.TextView
 	
 		}
 		remoteUser := user{name: RandomString(5), above18: true, conn: s, active: true}
-		fmt.Fprintf(logs, "Client "+s.RemoteAddr().String()+" connected.\n")
-		conns[remoteUser.name] = &remoteUser
-		loggedUsersUpdate <- true
-		sendDataToNewClient(conns["local"], &remoteUser, logs)
-		go handleConnection(conns, &remoteUser, chat, logs, loggedUsersUpdate)
+		
 	}
 }
 
